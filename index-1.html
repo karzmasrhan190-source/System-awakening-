@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HACKER_IDE // TERMINAL_MODE</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+
+<style>
+  :root {
+    --hacker-green: #00ff41;
+    --hacker-dark: #001100;
+    --hacker-glow: rgba(0, 255, 65, 0.6);
+    --text-muted: #008f11;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: #000;
+    color: var(--hacker-green);
+    font-family: 'Consolas', 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .crt-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+    background-size: 100% 4px;
+    z-index: 9999; pointer-events: none;
+  }
+
+  #matrix-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+  }
+
+  .ui-layer {
+    position: relative; z-index: 10; display: flex; flex-direction: column; height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .top-navbar {
+    display: flex; align-items: center; justify-content: flex-start;
+    background-color: rgba(0, 15, 0, 0.9); padding: 10px 20px;
+    border-bottom: 1px solid var(--hacker-green); box-shadow: 0 0 15px var(--hacker-glow);
+  }
+
+  .main-tabs { display: flex; gap: 15px; align-items: center; }
+
+  .main-btn {
+    background: #000; color: var(--hacker-green); border: 1px solid var(--hacker-green);
+    padding: 8px 20px; font-size: 14px; font-weight: bold; font-family: monospace;
+    cursor: pointer; transition: 0.3s; text-shadow: 0 0 5px var(--hacker-green);
+    box-shadow: 0 0 8px var(--hacker-glow);
+  }
+
+  .main-btn.active, .main-btn:hover { 
+    background: var(--hacker-green); color: #000; box-shadow: 0 0 20px var(--hacker-glow);
+  }
+
+  .stealth-btn {
+    background: transparent; border: none; color: #333; font-size: 20px;
+    cursor: pointer; opacity: 0.1; transition: 0.5s; padding: 5px;
+  }
+  
+  .stealth-btn:hover { opacity: 0.8; text-shadow: 0 0 10px red; }
+
+  .file-tabs-container {
+    background-color: rgba(0, 5, 0, 0.8); display: flex; border-bottom: 1px solid var(--text-muted);
+  }
+  
+  .file-tabs-container.hidden { display: none; }
+
+  .file-tab {
+    background: transparent; color: var(--text-muted); border: none; padding: 12px 20px;
+    font-size: 14px; font-family: monospace; cursor: pointer; border-top: 2px solid transparent;
+  }
+
+  .file-tab.active {
+    color: var(--hacker-green); background-color: rgba(0, 20, 0, 0.6);
+    border-top: 2px solid var(--hacker-green); text-shadow: 0 0 10px var(--hacker-green);
+  }
+
+  main { flex: 1; position: relative; display: flex; flex-direction: column; }
+
+  #editor { width: 100%; height: 100%; direction: ltr !important; text-align: left; background: transparent !important; }
+  #editor.hidden { display: none; }
+
+  .ace-terminal { background: transparent !important; }
+  .ace_gutter { background: rgba(0, 10, 0, 0.8) !important; color: var(--text-muted) !important; }
+  .ace_cursor { color: var(--hacker-green) !important; background-color: var(--hacker-green) !important; opacity: 0.8 !important; }
+
+  #output-container { width: 100%; height: 100%; background-color: #000; display: none; }
+  #output-container.active { display: block; }
+  iframe { width: 100%; height: 100%; border: none; background: #fff; }
+
+  #inject-modal {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0, 15, 0, 0.95); border: 1px solid var(--hacker-green);
+    box-shadow: 0 0 30px var(--hacker-glow); padding: 20px; z-index: 10000;
+    display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 600px;
+  }
+
+  #inject-modal.hidden { display: none; }
+  #inject-modal label { font-size: 13px; color: var(--hacker-green); text-shadow: 0 0 5px var(--hacker-green); }
+
+  #inject-textarea {
+    width: 100%; height: 150px; background: #000; color: var(--hacker-green);
+    border: 1px solid var(--text-muted); font-family: 'Consolas', monospace;
+    padding: 10px; resize: none; font-size: 14px; direction: ltr; text-align: left;
+  }
+
+  #inject-textarea:focus { outline: none; border-color: var(--hacker-green); box-shadow: 0 0 10px var(--hacker-glow) inset; }
+
+  .modal-buttons { display: flex; justify-content: space-between; align-items: center; }
+  .modal-cancel { background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted); padding: 5px 15px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+  <div class="crt-overlay"></div>
+  <canvas id="matrix-canvas"></canvas>
+
+  <div id="inject-modal" class="hidden">
+    <label>>_ ألصق الكود هنا:</label>
+    <textarea id="inject-textarea" placeholder="..."></textarea>
+    <div class="modal-buttons">
+      <button class="modal-cancel" onclick="closeInjectBox()">CANCEL</button>
+      <button class="main-btn" onclick="startHackerTyping()">START_HACK()</button>
+    </div>
+  </div>
+
+  <div class="ui-layer">
+    <div class="top-navbar">
+      <div class="main-tabs">
+        <button class="main-btn" id="btn-run" onclick="runCode()">RUN</button>
+        <button class="main-btn active" id="btn-code" onclick="switchMainTab('code')">CODE</button>
+        <button class="stealth-btn" onclick="openInjectBox()">☠️</button>
+      </div>
+    </div>
+
+    <div class="file-tabs-container" id="file-tabs">
+      <button class="file-tab active" id="tab-html" onclick="switchFile('html')">HTML</button>
+      <button class="file-tab" id="tab-css" onclick="switchFile('css')">CSS</button>
+      <button class="file-tab" id="tab-js" onclick="switchFile('js')">JS</button>
+    </div>
+
+    <main>
+      <div id="editor"></div>
+      <div id="output-container">
+        <iframe id="output-frame"></iframe>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // إعدادات الخلفية
+    const canvas = document.getElementById('matrix-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=%""\'#&_(),.;:?!\\|{}<>[]^~'.split('');
+    const fontSize = 14; const columns = canvas.width / fontSize;
+    const drops = Array(Math.floor(columns)).fill(1);
+
+    setInterval(() => {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0F0'; ctx.font = fontSize + 'px monospace';
+        for(let i = 0; i < drops.length; i++) {
+            ctx.fillText(letters[Math.floor(Math.random() * letters.length)], i * fontSize, drops[i] * fontSize);
+            if(drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        }
+    }, 35);
+    window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+
+    // إعدادات محرر الأكواد
+    const editor = ace.edit("editor");
+    editor.setTheme("ace/theme/terminal");
+    editor.setOptions({ 
+        fontSize: "16px", showLineNumbers: true, showGutter: true, 
+        wrap: true, fontFamily: "'Courier New', monospace",
+        cursorStyle: "wide", highlightActiveLine: false 
+    });
+
+    const sessions = {
+        html: ace.createEditSession("<!DOCTYPE html>\n<html>\n<head>\n  <title>System Breach</title>\n</head>\n<body>\n  <h1 id='title'>ACCESS GRANTED...</h1>\n</body>\n</html>", "ace/mode/html"),
+        css:  ace.createEditSession("body {\n  background-color: #050505;\n  color: #00ff41;\n}\n#title {\n  text-shadow: 0 0 10px #00ff41;\n}", "ace/mode/css"),
+        js:   ace.createEditSession("console.log('[+] CONNECTION ESTABLISHED');", "ace/mode/javascript")
+    };
+    editor.setSession(sessions.html);
+
+    let isTyping = false;
+    let charsPerTick = 2; // المعدل الأساسي
+    let speedTimer;
+
+    function openInjectBox() {
+        // إذا تم نسخ نص مسبقاً، سيحاول التركيز للصق مباشرة
+        document.getElementById('inject-modal').classList.remove('hidden');
+        const textarea = document.getElementById('inject-textarea');
+        textarea.focus();
+    }
+
+    function closeInjectBox() {
+        document.getElementById('inject-modal').classList.add('hidden');
+    }
+
+    // نظام الكتابة مع مضاعفة السرعة كل 3 ثواني
+    function startHackerTyping() {
+        if (isTyping) return;
+        const textarea = document.getElementById('inject-textarea');
+        const userText = textarea.value;
+        if (!userText) return;
+
+        closeInjectBox();
+        textarea.value = '';
+        if (document.getElementById('output-container').classList.contains('active')) { switchMainTab('code'); }
+
+        isTyping = true;
+        editor.setReadOnly(true);
+        editor.setValue("");
+        let index = 0;
+        charsPerTick = 2; 
+
+        // مضاعفة سرعة الكتابة كل 3 ثواني
+        speedTimer = setInterval(() => {
+            charsPerTick *= 2; 
+        }, 3000);
+
+        function typeChar() {
+            if (index < userText.length) {
+                editor.insert(userText.substr(index, charsPerTick));
+                index += charsPerTick;
+                editor.renderer.scrollCursorIntoView();
+                setTimeout(typeChar, 15);
+            } else {
+                isTyping = false;
+                editor.setReadOnly(false);
+                clearInterval(speedTimer);
+            }
+        }
+        typeChar();
+    }
+
+    // التنقل والتشغيل
+    function switchFile(fileType) {
+        document.querySelectorAll('.file-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-${fileType}`).classList.add('active');
+        editor.setSession(sessions[fileType]);
+    }
+
+    function switchMainTab(tab) {
+        if (tab === 'code') {
+            document.getElementById('btn-code').classList.add('active'); 
+            document.getElementById('btn-run').classList.remove('active');
+            document.getElementById('file-tabs').classList.remove('hidden'); 
+            document.getElementById('output-container').classList.remove('active');
+            document.getElementById('editor').style.display = 'block';
+        } else {
+            document.getElementById('btn-run').classList.add('active');
+            document.getElementById('btn-code').classList.remove('active'); 
+            document.getElementById('file-tabs').classList.add('hidden'); 
+            document.getElementById('editor').style.display = 'none';
+            document.getElementById('output-container').classList.add('active');
+        }
+    }
+
+    function runCode() {
+        const frame = document.getElementById('output-frame');
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        doc.open(); 
+        doc.write(`${sessions.html.getValue()}<style>${sessions.css.getValue()}</style><script>${sessions.js.getValue()}<\/script>`); 
+        doc.close();
+        switchMainTab('output');
+    }
+  </script>
+</body>
+  </html>
